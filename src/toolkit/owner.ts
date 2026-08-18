@@ -31,7 +31,7 @@ export type OwnerAwareCtx = {
   env?: Record<string, unknown> | null;
   from?: { id: number } | undefined;
   chat?: { id: number } | undefined;
-  reply: (text: string, ...args: unknown[]) => unknown | Promise<unknown>;
+  reply: (text: string) => unknown | Promise<unknown>;
   answerCallbackQuery?: (
     opts?: { text?: string; show_alert?: boolean },
   ) => unknown | Promise<unknown>;

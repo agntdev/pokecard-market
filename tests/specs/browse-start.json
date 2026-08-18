@@ -7,7 +7,7 @@
           {
             "method": "sendMessage",
             "payload": {
-              "text": "View available Pokémon card listings"
+              "text": "Listings are temporarily unavailable. Try again shortly."
             }
           }
         ],

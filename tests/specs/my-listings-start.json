@@ -7,7 +7,7 @@
           {
             "method": "sendMessage",
             "payload": {
-              "text": "View and manage your active listings"
+              "text": "Your listings are temporarily unavailable. Try again shortly."
             }
           }
         ],

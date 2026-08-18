@@ -7,7 +7,7 @@
           {
             "method": "sendMessage",
             "payload": {
-              "text": "Submit a payout request for your earnings"
+              "text": "Your earnings are temporarily unavailable. Try again shortly."
             }
           }
         ],

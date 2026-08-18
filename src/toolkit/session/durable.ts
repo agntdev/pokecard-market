@@ -51,6 +51,16 @@ interface Reminder {
   text: string;
 }
 
+interface MarketplaceRequest {
+  operation: string;
+  payload: unknown;
+}
+
+interface IndexedRecord {
+  id: string;
+  sellerId?: number;
+}
+
 /**
  * createDurableSessionStorage — a grammY StorageAdapter that routes each session
  * key to its own ChatDO instance. Pass to buildBot({ storage }) in the Worker.
@@ -154,6 +164,13 @@ export class ChatDO {
       return new Response(null, { status: 204 });
     }
 
+    // Marketplace domain records share one named Durable Object. Collections are
+    // addressed through explicit index records; there is no keyspace scan.
+    if (url.pathname === "/marketplace" && request.method === "POST") {
+      const marketplaceRequest = (await request.json()) as MarketplaceRequest;
+      return this.marketplace(marketplaceRequest);
+    }
+
     return new Response("not found", { status: 404 });
   }
 
@@ -178,5 +195,96 @@ export class ChatDO {
     if (current === null || next < current) {
       await this.state.storage.setAlarm(next);
     }
+  }
+
+  private async marketplace(request: MarketplaceRequest): Promise<Response> {
+    const payload = request.payload as Record<string, unknown> | string | number | null;
+    const read = async <T>(key: string): Promise<T | undefined> =>
+      this.state.storage.get<T>(`market:${key}`);
+    const write = async (key: string, value: unknown): Promise<void> =>
+      this.state.storage.put(`market:${key}`, value);
+    const append = async (key: string, id: string): Promise<void> => {
+      const ids = (await read<string[]>(key)) ?? [];
+      if (!ids.includes(id)) await write(key, [...ids, id]);
+    };
+    const records = async <T extends IndexedRecord>(index: string, prefix: string): Promise<T[]> => {
+      const ids = (await read<string[]>(index)) ?? [];
+      const values = await Promise.all(ids.map((recordId) => read<T>(`${prefix}:${recordId}`)));
+      return values.filter((value) => value !== undefined) as T[];
+    };
+
+    if (request.operation === "listing:save" || request.operation === "listing:update") {
+      const listing = payload as unknown as IndexedRecord;
+      await write(`listing:${listing.id}`, listing);
+      await append("listing:ids", listing.id);
+      if (typeof listing.sellerId === "number") await append(`listing:seller:${listing.sellerId}`, listing.id);
+      return Response.json(true);
+    }
+    if (request.operation === "user:save") {
+      const user = payload as { id: number };
+      await write(`user:${user.id}`, user);
+      await append("user:ids", String(user.id));
+      return Response.json(true);
+    }
+    if (request.operation === "listing:get") return Response.json(await read(`listing:${String(payload)}`));
+    if (request.operation === "listing:list") return Response.json(await records("listing:ids", "listing"));
+    if (request.operation === "listing:seller") {
+      return Response.json(await records(`listing:seller:${String(payload)}`, "listing"));
+    }
+    if (request.operation === "order:save" || request.operation === "order:update") {
+      const order = payload as unknown as IndexedRecord;
+      await write(`order:${order.id}`, order);
+      await append("order:ids", order.id);
+      if (typeof order.sellerId === "number") await append(`order:seller:${order.sellerId}`, order.id);
+      return Response.json(true);
+    }
+    if (request.operation === "order:reserve") {
+      const order = payload as unknown as IndexedRecord & { listingId: string; quantity: number };
+      const listing = await read<{ id: string; quantity: number; status: string }>(`listing:${order.listingId}`);
+      if (!listing || listing.status !== "active" || listing.quantity < order.quantity) return Response.json(false);
+      listing.quantity -= order.quantity;
+      if (listing.quantity === 0) listing.status = "reserved";
+      await write(`listing:${listing.id}`, listing);
+      await write(`order:${order.id}`, order);
+      await append("order:ids", order.id);
+      if (typeof order.sellerId === "number") await append(`order:seller:${order.sellerId}`, order.id);
+      return Response.json(true);
+    }
+    if (request.operation === "order:get") return Response.json(await read(`order:${String(payload)}`));
+    if (request.operation === "order:cancel") {
+      const order = await read<{ id: string; listingId: string; quantity: number; paymentStatus: string }>(`order:${String(payload)}`);
+      if (!order || order.paymentStatus === "fee_verified" || order.paymentStatus === "cancelled") return Response.json(false);
+      const listing = await read<{ id: string; quantity: number; status: string }>(`listing:${order.listingId}`);
+      if (listing) {
+        listing.quantity += order.quantity;
+        listing.status = "active";
+        await write(`listing:${listing.id}`, listing);
+      }
+      order.paymentStatus = "cancelled";
+      await write(`order:${order.id}`, order);
+      return Response.json(true);
+    }
+    if (request.operation === "order:verify") {
+      const order = await read<{ id: string; listingId: string; paymentStatus: string }>(`order:${String(payload)}`);
+      if (!order || order.paymentStatus !== "fee_submitted") return Response.json(false);
+      order.paymentStatus = "fee_verified";
+      await write(`order:${order.id}`, order);
+      const listing = await read<{ id: string; quantity: number; status: string }>(`listing:${order.listingId}`);
+      if (listing && listing.quantity === 0) {
+        listing.status = "sold";
+        await write(`listing:${listing.id}`, listing);
+      }
+      return Response.json(true);
+    }
+    if (request.operation === "order:seller") {
+      return Response.json(await records(`order:seller:${String(payload)}`, "order"));
+    }
+    if (request.operation === "fee:save") {
+      const fee = payload as { saleId: string };
+      await write(`fee:${fee.saleId}`, fee);
+      await append("fee:ids", fee.saleId);
+      return Response.json(true);
+    }
+    return new Response("unknown marketplace operation", { status: 400 });
   }
 }
