@@ -7,7 +7,7 @@
           {
             "method": "sendMessage",
             "payload": {
-              "text": "Begin the listing creation process"
+              "text": "Send the card title."
             }
           }
         ],
@@ -15,6 +15,18 @@
           "callback": "sell:start"
         }
       }
+    ]
+  },
+  {
+    "name": "Listing creation collects card details before publishing",
+    "steps": [
+      { "send": { "callback": "sell:start" }, "expect": [{ "method": "sendMessage", "payload": { "text": "Send the card title." } }] },
+      { "send": { "text": "Charizard Base Set" }, "expect": [{ "method": "sendMessage", "payload": { "text": "Send the price and currency, for example: 25 USD." } }] },
+      { "send": { "text": "25 USD" }, "expect": [{ "method": "sendMessage", "payload": { "text": "How many copies are available? Send a whole number." } }] },
+      { "send": { "text": "1" }, "expect": [{ "method": "sendMessage", "payload": { "text": "Choose the card condition." } }] },
+      { "send": { "callback": "listing:condition:Near mint" }, "expect": [{ "method": "sendMessage", "payload": { "text": "Send up to 5 photos, then tap Continue." } }] },
+      { "send": { "callback": "listing:photos:skip" }, "expect": [{ "method": "sendMessage", "payload": { "text": "Send a short description. Include set, card number, or anything buyers should know." } }] },
+      { "send": { "text": "Clean holofoil with light edge wear." }, "expect": [{ "method": "sendMessage", "payload": { "text": "Review your listing:\nCharizard Base Set\n25 USD · 1 available\nNear mint\n0 photos\nClean holofoil with light edge wear." } }] }
     ]
   }
 ]
