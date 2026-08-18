@@ -1,0 +1,20 @@
+[
+  {
+    "name": "My Listings",
+    "steps": [
+      {
+        "expect": [
+          {
+            "method": "sendMessage",
+            "payload": {
+              "text": "View and manage your active listings"
+            }
+          }
+        ],
+        "send": {
+          "callback": "my_listings:start"
+        }
+      }
+    ]
+  }
+]
